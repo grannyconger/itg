@@ -126,8 +126,8 @@
       const runs = S.flatMap((s) => g(s, "lab.caseyRuns") || []), js = S.map((s) => g(s, "lab.jordanFinal")).filter(Boolean).sort((a, b) => a - b);
       const $$ = (n) => (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
       if (!runs.length) return null;
-      const rows = [{ label: "Casey's average result", value: $$(avg(runs.map((r) => r.total))), frac: 0 }, { label: `of ${runs.length} Casey runs lost money`, value: pct(runs.filter((r) => r.total < 0).length / runs.length), frac: 0 }];
-      if (js.length) rows.push({ label: "Jordan's middle result", value: $$(js[Math.floor(js.length / 2)]), frac: 0 });
+      const rows = [{ label: "Casey's average profit or loss", value: $$(avg(runs.map((r) => r.total))), frac: 0 }, { label: `of ${runs.length} Casey runs lost money`, value: pct(runs.filter((r) => r.total < 0).length / runs.length), frac: 0 }];
+      if (js.length) rows.push({ label: "Jordan's middle ending balance", value: $$(js[Math.floor(js.length / 2)]), frac: 0 });
       return { view: "results", kind: "nums", title: "Our class simulation", sub: "Each of them put in $36,000", rows };
     }
     if (id === "cer") {
