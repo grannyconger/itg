@@ -1,0 +1,6 @@
+private/
+*.pdf
+*.pptx
+.DS_Store
+node_modules/
+*.log

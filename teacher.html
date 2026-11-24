@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teacher dashboard · Invest, Trade, or Bet?</title>
+<link rel="stylesheet" href="styles.css?v=1">
+<style>
+  main { max-width: 1280px; }
+  .ctl { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ctl button { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 14px; }
+  .ctl button.open { background: #e5f4ec; border-color: var(--ok); color: #134d35; font-weight: 600; }
+  .cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; }
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  table.t td.num { text-align: center; }
+  .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--accent); }
+  .lowrow td { background: #fff7f5; }
+  select.ov { width: auto; padding: 3px 6px; font-size: 14px; }
+  @media (max-width: 1000px) { .cols { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<header class="top"><h1>Teacher dashboard</h1><span class="who" id="who"></span></header>
+<main id="app"></main>
+<div id="panel" class="panel hidden"></div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script>window.ITG_TEACHER = true;</script>
+<script src="config.js?v=1"></script>
+<script src="content.js?v=1"></script>
+<script src="store.js?v=1"></script>
+<script src="teacher.js?v=1"></script>
+</body>
+</html>
