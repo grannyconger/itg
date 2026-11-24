@@ -16,3 +16,6 @@ body.screen #app { min-height: 100vh; display: grid; grid-template-rows: auto 1f
 .s-nums { display: flex; flex-wrap: wrap; gap: 4vh 6vw; } .s-nums b { display: block; font-size: clamp(48px, 7vw, 130px); line-height: 1; } .s-nums span { font-size: clamp(18px, 2vw, 34px); color: var(--on-palm-2); }
 .s-err { padding: 2vh 5vw; background: var(--bad); font-size: 24px; }
 @media (max-width: 800px) { .s-two, .s-join { grid-template-columns: 1fr; } .s-join .art { display: none; } }
+
+.s-bar.right > span, .s-bar.right > b { font-weight: 700; color: #f0d79b; }
+.s-bar.right .track { outline: 3px solid #f0d79b; outline-offset: 3px; }

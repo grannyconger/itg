@@ -19,7 +19,8 @@
   const waiting = (s) => { const out = []; if (g(s, "submit.pre") && g(s, "sc.pre.cerScore") == null) out.push("pre"); for (let n = 1; n <= (g(s, "sc.allowed") || 1); n++) if (g(s, "submit.a" + n) && g(s, `sc.a${n}.cerScore`) == null) out.push("post"); return out; };
   const problem = (e) => { console.warn(e); alertBar(e.message || String(e)); };
   function alertBar(m) { $("bar").replaceChildren(...(m ? [h("span", {}, m), h("button", { class: "btn ghost", onclick: () => alertBar("") }, "Dismiss")] : [])); }
-  const stateSet = (x) => Store.setState(T.cc, x).catch(problem);
+  // Shows the change only after the server confirms it.
+  const stateSet = (x) => { const cc = T.cc; return Store.setState(cc, x).then((d) => { alertBar(""); if (d && cc === T.cc) { T.state = d; draw(); } }, problem); };
   const minute = 60000, phaseAt = (id) => L.phases.findIndex((p) => p.id === id);
   const now = () => window.UI.current(L, T.state);
 
@@ -49,17 +50,17 @@
   }
   function merge() {
     T.students = Object.keys(T.recs).map((k) => Object.assign({ _id: k }, T.recs[k], { sc: T.scores[k] || {} })).sort((a, b) => String(a.name).localeCompare(String(b.name)));
-    schedule();
+    schedule(); liveHook();
   }
   function pickClass(cc) {
     T.cc = cc || T.cc || L.classCodes[0];
     $("cls").replaceChildren(h("select", { "aria-label": "Class", onchange: (e) => { e.target.blur(); pickClass(e.target.value); } }, [...L.classCodes, "TEST"].map((c) => h("option", { value: c, selected: c === T.cc }, "Class " + c))));
     T.offs.forEach((f) => f());
-    Object.assign(T, { recs: {}, scores: {}, students: [], state: { unlocked: [] }, reteach: null, item: null, drafts: {}, lastDone: null });
+    Object.assign(T, { gotStudents: false, recs: {}, scores: {}, students: [], state: { unlocked: [] }, reteach: null, item: null, drafts: {}, lastDone: null });
     closePanel(); draw();
     T.offs = [
       Store.subscribeState(T.cc, (st) => { T.state = st; merge(); }, problem),
-      Store.subscribeAll(T.cc, "students", (m) => { T.recs = m; merge(); }, problem),
+      Store.subscribeAll(T.cc, "students", (m) => { T.recs = m; T.gotStudents = true; merge(); }, problem),
       Store.subscribeAll(T.cc, "scores", (m) => { T.scores = m; merge(); }, problem)
     ];
   }
@@ -70,7 +71,7 @@
   // The projector goes back to the clock and the last result clears when a section starts.
   function goTo(id) {
     const p = L.phases[phaseAt(id)], t = Date.now();
-    stateSet({ unlocked: inOrder([...(T.state.unlocked || []), id]), phase: id, startedAt: t, plan: p.minutes * minute, endsAt: t + p.minutes * minute, left: null, eyes: false, screen: { view: "now", rows: [] } });
+    stateSet({ unlocked: inOrder([...(T.state.unlocked || []), id]), phase: id, startedAt: t, plan: p.minutes * minute, endsAt: t + p.minutes * minute, left: null, eyes: false, screen: id === "hook" ? hookScreen(!!T.state.hookReveal) : { view: "now", rows: [] } });
   }
   function addTime(ms) {
     if (typeof T.state.left === "number") stateSet({ left: T.state.left + ms, plan: T.state.plan + ms });
@@ -91,45 +92,53 @@
       return [Math.min(7, Object.keys(d.mc || {}).length + n(["C", "E", "R"].map((k) => g(d, "cer." + k)))), 8];
     }
     if (id === "hook") return [fin ? 1 : 0, 1];
-    if (id === "table") return [n(L.table.blanks.map((b) => b.answers.includes(String(g(s, "table." + b.id) || "").trim().toLowerCase()))), L.table.blanks.length];
-    if (id === "lab") return [(g(s, "lab.jordanFinal") ? 1 : 0) + Math.min(L.lab.casey.runs, (g(s, "lab.caseyRuns") || []).length), L.lab.casey.runs + 1];
     if (id === "cer") return [n(L.cer.items.map((x) => g(s, "cer.items." + x.id + ".correct") || (x.type === "short" && g(s, "cer.items." + x.id)))), L.cer.items.length];
     if (id === "sort") { const a = [...L.sorter.round1, ...L.sorter.round2]; return [n(a.map((q) => g(s, "sort." + q.id + ".label"))), a.length]; }
     return [fin ? 1 : 0, 1];
   }
+  const tracked = (id) => L.saved.includes(id) || id === "hook";
   const finished = (s, id) => { const [d, t] = progress(s, id); return d >= t; };
   // Who to walk over to, most urgent first.
   function checkIns() {
-    const id = now(), at = phaseAt(id), out = [];
-    if (!id) return out;
+    const id = now(), out = [];
+    if (!id || !tracked(id)) return out;
     const started = T.state.startedAt || 0, since = Date.now() - started;
     T.students.forEach((s) => {
       const [d, t] = progress(s, id);
       if (d >= t) return;
-      const idle = Math.floor((Date.now() - Math.max(s.updatedAt || 0, started)) / minute), on = phaseAt(s.phase);
-      if (on >= 0 && on < at && since > minute) out.push({ s, why: "Still on " + L.phases[on].name, rank: 3 });
+      const idle = Math.floor((Date.now() - Math.max(s.updatedAt || 0, started)) / minute), none = d === 0;
+      if (none && since > 3 * minute) out.push({ s, why: "Nothing saved here yet", rank: 3 });
       else if (idle >= 3 && idle < 240) out.push({ s, why: `No saves for ${idle} min`, rank: 2 + idle / 100 });
       else if (since > T.state.plan * .6 && d / t < .34) out.push({ s, why: `${d} of ${t} done`, rank: 1 });
     });
     return out.sort((a, b) => b.rank - a.rank);
   }
 
+  // ---------- question of the day: live totals, then the reveal ----------
+  function hookScreen(reveal) {
+    const a = T.students.map((s) => g(s, "hook.choice")).filter((x) => x !== undefined);
+    return { view: "results", kind: "bars", live: true, title: L.hook.q, sub: reveal ? L.hook.reveal : `${a.length} of ${T.students.length} guesses in`,
+      rows: L.hook.choices.map((c, i) => { const n = a.filter((x) => x === i).length; return Object.assign({ label: c, value: String(n), frac: a.length ? n / a.length : 0 }, reveal && i === L.hook.answer ? { right: true } : {}); }) };
+  }
+  let liveTimer = null, liveBusy = false;
+  function liveHook() {
+    if (liveTimer || T.state.phase !== "hook" || !(T.state.screen || {}).live) return;
+    liveTimer = setTimeout(() => {
+      liveTimer = null;
+      const sc = T.state.screen || {};
+      if (T.state.phase !== "hook" || !sc.live || !T.gotStudents) return;
+      if (liveBusy) return liveHook();
+      const next = hookScreen(!!T.state.hookReveal), sig = (x) => JSON.stringify([x.sub, (x.rows || []).map((r) => [r.label, r.value, !!r.right])]);
+      if (sig(next) === sig(sc)) return;
+      liveBusy = true;
+      stateSet({ screen: next }).then(() => (liveBusy = false));
+    }, 2000);
+  }
   // ---------- projector results. Totals only, never names ----------
   function results(id) {
     const S = T.students;
     const bars = (title, rows, sub) => ({ view: "results", kind: "bars", title, sub: sub || "", rows });
-    if (id === "hook") {
-      const a = S.map((s) => g(s, "hook.choice")).filter((x) => x !== undefined);
-      return a.length ? bars(L.hook.q, L.hook.choices.map((c, i) => { const n = a.filter((x) => x === i).length; return { label: c, value: String(n), frac: n / a.length }; }), `${a.length} guesses`) : null;
-    }
-    if (id === "lab") {
-      const runs = S.flatMap((s) => g(s, "lab.caseyRuns") || []), js = S.map((s) => g(s, "lab.jordanFinal")).filter(Boolean).sort((a, b) => a - b);
-      const $$ = (n) => (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
-      if (!runs.length) return null;
-      const rows = [{ label: "Casey's average profit or loss", value: $$(avg(runs.map((r) => r.total))), frac: 0 }, { label: `of ${runs.length} Casey runs lost money`, value: pct(runs.filter((r) => r.total < 0).length / runs.length), frac: 0 }];
-      if (js.length) rows.push({ label: "Jordan's middle ending balance", value: $$(js[Math.floor(js.length / 2)]), frac: 0 });
-      return { view: "results", kind: "nums", title: "Our class simulation", sub: "Each of them put in $36,000", rows };
-    }
+    if (id === "hook") return hookScreen(!!T.state.hookReveal);
     if (id === "cer") {
       const rows = metrics().practice.filter((x) => x.n).map((x) => ({ label: x.title, value: pct(x.first), frac: x.first }));
       return rows.length ? bars("Right on the first try", rows) : null;
@@ -199,7 +208,7 @@
   }
   function toggle(p) {
     const open = T.state.unlocked || [], o = open.includes(p.id);
-    if (o && T.students.some((s) => s.phase === p.id) && !confirm(`Students are working in ${p.name}. Close it and move them out?`)) return;
+    if (o && T.students.length && !confirm(`Close ${p.name}? Any student in it moves out.`)) return;
     const u = o ? open.filter((x) => x !== p.id) : [...open, p.id];
     // keep the class pointer where it is, so opening one for a single student moves nobody
     stateSet(Object.assign({ unlocked: inOrder(u) }, o && T.state.phase === p.id ? { phase: null, startedAt: null, endsAt: null, left: null } : !T.state.phase && now() ? { phase: now() } : {}));
@@ -229,7 +238,7 @@
     msg.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
 
     const left = h("section", { class: "now" }, h("h1", {}, p ? p.name : "No section is open"), h("div", { id: "bigclock", class: "bigclock", role: "timer" }),
-      p ? [h("div", { class: "muted" }, n ? `${done} of ${n} finished` : "No students signed in yet"), h("div", { class: "meter" }, h("i", { style: `width:${n ? (done / n) * 100 : 0}%` }))] : null,
+      p && !tracked(id) ? h("div", { class: "muted" }, "Work in this section is not saved, so there is no count.") : p ? [h("div", { class: "muted" }, n ? `${done} of ${n} finished` : "No students signed in yet"), h("div", { class: "meter" }, h("i", { style: `width:${n ? (done / n) * 100 : 0}%` }))] : null,
       !p ? h("button", { id: "mainbtn", class: "btn main", onclick: () => goTo(L.phases[0].id) }, "Start lesson") :
       !started ? h("button", { id: "mainbtn", class: "btn main", onclick: () => goTo(id) }, "Start " + p.name) :
       nx ? h("button", { id: "mainbtn", class: "btn main", onclick: () => goTo(nx.id) }, "Open next: " + nx.name, icon("next")) : h("p", { class: "muted" }, "Last section. Grade from the Grading tab when you are ready."),
@@ -238,12 +247,16 @@
       h("details", { style: "margin-top:22px" }, h("summary", {}, "More lesson controls"), h("div", { class: "seg" },
         at > 0 ? btn("Back to " + L.phases[at - 1].name, () => goTo(L.phases[at - 1].id)) : null,
         btn("Open every section", () => { if (confirm("Open every section for this class, post-test too?")) stateSet({ unlocked: L.phases.map((x) => x.id), phase: id || "pre" }); }),
-        btn("Reset class to the pre-test", () => { if (confirm("Close every section except the pre-test? Student work stays.")) stateSet({ unlocked: ["pre"], phase: null, startedAt: null, endsAt: null, left: null, eyes: false, message: "", screen: { view: "join", rows: [] } }); }))));
+        btn("Reset class to the pre-test", () => { if (confirm("Close every section except the pre-test? Student work stays.")) stateSet({ unlocked: ["pre"], phase: null, startedAt: null, endsAt: null, left: null, eyes: false, hookReveal: false, message: "", screen: { view: "join", rows: [] } }); }))));
     const ul = (a) => h("ul", {}, a.map((x) => h("li", {}, x)));
     const mid = h("section", { class: "script" }, !p ? h("p", { class: "muted" }, "Press Start lesson to open the pre-test and start the clock.") : [h("h2", {}, "Say"), h("p", {}, N.say), h("h2", {}, "Do"), ul(N.run || []), (N.ask || []).length ? [h("h2", {}, "Ask"), ul(N.ask)] : null, h("h2", {}, "Watch for"), h("p", { style: "font-size:18px" }, N.watch), h("p", { class: "trim hidden", id: "trim" }, "Running over. " + N.trim)]);
     const url = "screen.html?cc=" + T.cc;
-    const right = h("section", {}, h("h2", {}, "Needs a check-in"),
-      list.length ? h("div", { class: "list" }, list.slice(0, 7).map((x) => h("button", { onclick: () => openPanel(x.s._id) }, h("b", {}, x.s.name || x.s._id), h("span", {}, x.why)))) : h("p", { class: "muted" }, n ? "Everyone is on track." : "Students show up here if they stall or fall behind."),
+    const said = T.students.filter((s) => g(s, "hook.choice") !== undefined), shown = !!T.state.hookReveal;
+    const guesses = id === "hook" ? [h("h2", {}, `Guesses: ${said.length} of ${n}`),
+      h("div", { class: "list" }, L.hook.choices.map((c, i) => { const w = said.filter((s) => s.hook.choice === i); return h("div", { style: "padding:6px 0" }, h("b", {}, `${c}${i === L.hook.answer ? " (answer)" : ""}: ${w.length}`), h("div", { class: "muted" }, w.map((s) => s.name || s._id).join(", "))); })),
+      h("div", { class: "seg" }, h("button", { id: "reveal", class: "btn" + (shown ? " ghost" : ""), onclick: () => stateSet({ hookReveal: !shown, screen: hookScreen(!shown) }) }, shown ? "Hide the answer" : "Reveal the answer"))] : null;
+    const right = h("section", {}, guesses, h("h2", {}, "Needs a check-in"),
+      list.length ? h("div", { class: "list" }, list.slice(0, 7).map((x) => h("button", { onclick: () => openPanel(x.s._id) }, h("b", {}, x.s.name || x.s._id), h("span", {}, x.why)))) : h("p", { class: "muted" }, id && !tracked(id) ? "Not tracked in this section." : n ? "Everyone is on track." : "Students show up here if they stall or fall behind."),
       list.length > 7 ? h("p", { class: "muted" }, `and ${list.length - 7} more`) : null,
       h("h2", {}, "On the projector"),
       h("div", { class: "seg" }, [["join", "Sign in"], ["now", "Clock"]].map(([v, t]) => btn(t, () => setView(v), view === v ? "" : "ghost")), h("button", { class: "btn " + (view === "results" ? "" : "ghost"), disabled: !res, title: res ? "" : "No class results for this section yet", onclick: () => stateSet({ screen: res }) }, view === "results" ? "Refresh results" : "Class results")),
@@ -253,7 +266,7 @@
   }
 
   // ---------- STUDENTS ----------
-  const COLS = [["name", "Name"], ["phase", "Section"], ["prog", "Progress"], ["preMC", "Pre MC"], ["preCER", "Pre CER"], ["practice", "Practice"], ["r1", "Sort 1"], ["r2", "Sort 2"], ["postMC", "Post MC"], ["postCER", "Post CER"], ["growth", "Growth"], ["status", "Grade"]];
+  const COLS = [["name", "Name"], ["phase", "Last saved"], ["prog", "Progress"], ["preMC", "Pre MC"], ["preCER", "Pre CER"], ["practice", "Practice"], ["r1", "Sort 1"], ["r2", "Sort 2"], ["postMC", "Post MC"], ["postCER", "Post CER"], ["growth", "Growth"], ["status", "Grade"]];
   function studentsView() {
     const val = (x, k) => { const v = k === "prog" ? x.frac : k === "phase" ? phaseAt(x.s.phase) : x.r[k]; return v == null || v === "-" ? -99 : typeof v === "string" && /^[+-]?\d/.test(v) ? parseFloat(v) : v; };
     const all = T.students.map((s) => { const [d, t] = progress(s, s.phase); return { s, r: studentRow(s), prog: s.phase ? `${d}/${t}` : "-", frac: s.phase ? d / t : null }; });
@@ -431,7 +444,7 @@
     const close = btn("Close", closePanel), list = attempts(s), name = s.name || id;
     const r2 = L.sorter.round2.map((q) => ({ q, x: g(s, "sort." + q.id) })).filter((y) => y.x && y.x.evidence);
     const box = h("div", {}, h("div", { class: "row" }, h("h2", {}, name), h("span", { class: "push" }), close),
-      h("table", { class: "t" }, L.phases.map((p) => { const [d, t] = progress(s, p.id); return h("tr", {}, h("td", {}, p.name, s.phase === p.id ? h("b", {}, ", here now") : null), h("td", { class: "num" }, `${d} of ${t}`)); })),
+      h("table", { class: "t" }, L.phases.filter((p) => tracked(p.id)).map((p) => { const [d, t] = progress(s, p.id); return h("tr", {}, h("td", {}, p.name, s.phase === p.id ? h("b", {}, ", last saved") : null), h("td", { class: "num" }, `${d} of ${t}`)); })),
       list.length ? [...list].reverse().map((a) => h("div", { style: "margin-top:22px" }, h("div", { class: "row" }, h("h3", { style: "margin:0" }, `Post-test attempt ${a.n}`), h("span", { class: "push" }), btn(reviewed(s, a) ? "Change score" : "Grade", () => { const k = id + ":" + a.n; delete T.drafts[k]; T.drafts[k] = Object.assign(draftFor({ id: k, s, a }), { hold: true }); T.item = k; T.tab = "grade"; closePanel(); draw(); })),
         h("p", {}, `Multiple choice ${a.mcScore} of ${L.post.mc.length}. CER ${cerFor(s, a) ?? "pending"}${reviewed(s, a) ? ", reviewed" : ", not reviewed"}.`))) : h("p", { class: "muted" }, "No post-test yet."),
       r2.length ? h("details", { style: "margin:14px 0" }, h("summary", {}, `Scenario writing (${r2.length})`), r2.map(({ q, x }) => h("div", { style: "margin:14px 0" }, h("p", { style: "margin:0 0 4px" }, q.text), h("span", { class: "tag t-" + x.label }, x.label), h("div", { class: "cer-box E" }, x.evidence), h("div", { class: "cer-box R" }, x.reasoning)))) : null,
@@ -454,12 +467,12 @@
   }
 
   function csv() {
-    const head = ["Name", "Class", "Phase", "Pre MC", "Pre CER", "Practice first try", "Sort R1", "Sort R2 avg", "Post MC", "Post CER (AI)", "Post CER (final)", "CER growth", "Attempt counted", "Status", "Post Claim", "Post Evidence", "Post Reasoning", "Jordan final", "Casey avg"];
+    const head = ["Name", "Class", "Phase", "Pre MC", "Pre CER", "Practice first try", "Sort R1", "Sort R2 avg", "Post MC", "Post CER (AI)", "Post CER (final)", "CER growth", "Attempt counted", "Status", "Post Claim", "Post Evidence", "Post Reasoning"];
     const q = (v) => { v = String(v ?? ""); if (/^[=+@]|^-\D/.test(v)) v = "'" + v; return `"${v.replace(/"/g, '""')}"`; };
     const lines = [head.map(q).join(",")];
     T.students.forEach((s) => {
-      const r = studentRow(s), b = best(s) || {}, runs = g(s, "lab.caseyRuns") || [];
-      lines.push([r.name, T.cc, r.phase, r.preMC, r.preCER, r.practice, r.r1, r.r2, r.postMC, b.cerScore, r.postCER, r.growth, b.n, r.status, g(b, "cer.C"), g(b, "cer.E"), g(b, "cer.R"), g(s, "lab.jordanFinal"), runs.length ? Math.round(avg(runs.map((x) => x.total))) : ""].map(q).join(","));
+      const r = studentRow(s), b = best(s) || {};
+      lines.push([r.name, T.cc, r.phase, r.preMC, r.preCER, r.practice, r.r1, r.r2, r.postMC, b.cerScore, r.postCER, r.growth, b.n, r.status, g(b, "cer.C"), g(b, "cer.E"), g(b, "cer.R")].map(q).join(","));
     });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));

@@ -4,6 +4,7 @@ A live classroom lesson. Students: `student.html`. Teacher: `teacher.html`. Proj
 
 - Hosting: GitHub Pages. Data: Firestore in the Roll with the Market project. AI and scoring: the RWM Cloudflare Worker, `/itg/` routes.
 - Students sign in with a name and class. No accounts.
+- Saved to the database: pre-test, CER practice, scenario sorter, post-test, plus one question of the day guess per student. The list is `saved` in `content.js`.
 - Answer keys, the teacher PIN, and the Claude key are Worker secrets. Never commit them.
 - Student text lives in `content.js`. If you change s7 to s12, the CER prompts, or the rubric, update `worker/itg-content.js` in RWM and redeploy the Worker.
 - After editing a script or stylesheet, raise the `?v=` number in all three HTML pages so browsers load the new one.

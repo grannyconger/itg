@@ -7,6 +7,9 @@ window.LESSON = {
   title: "Invest, Trade, or Bet?",
   classCodes: ["2B", "4B"],
 
+  // Only these sections save to the database. The question of the day sends one guess per student.
+  saved: ["pre", "cer", "sort", "post"],
+
   phases: [
     { id: "pre", name: "Pre-test", minutes: 6 },
     { id: "hook", name: "Question of the day", minutes: 2 },

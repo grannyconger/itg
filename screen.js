@@ -7,7 +7,7 @@
   let st = null, err = "";
   const DO = {
     pre: ["Work on your own. This is not graded.", "Make your best guess.", "Write all three parts: Claim, Evidence, Reasoning."],
-    hook: ["Pick your guess on your own.", "Write the real number on your notes sheet."],
+    hook: ["Pick your guess, then press Confirm.", "Write the real number on your notes sheet."],
     table: ["Watch the video.", "Fill in your notes sheet.", "Finish the quick check."],
     lab: ["Write your prediction first.", "Jordan: use the S&P 500 calculator.", "Casey: run 10 years, 5 times.", "Write your results on your notes sheet."],
     cer: ["Read the everyday example.", "Work through the 8 practice items.", "Ask: can I point to it, or does it explain why?"],
@@ -27,7 +27,7 @@
       const rows = sc.rows || [];
       main = h("div", { class: "s-main" }, h("h1", {}, sc.title || "Class results"), sc.sub ? h("p", { class: "s-sub" }, sc.sub) : null,
         sc.kind === "nums" ? h("div", { class: "s-nums" }, rows.map((r) => h("div", {}, h("b", {}, r.value), h("span", {}, r.label)))) :
-        h("div", { class: "s-bars" }, rows.map((r, n) => h("div", { class: "s-bar" }, h("span", {}, r.label), h("b", {}, r.value), h("div", { class: "track" }, h("i", { style: `width:${Math.round((r.frac || 0) * 100)}%;background:${BEDS[n % 8]}` }))))));
+        h("div", { class: "s-bars" }, rows.map((r, n) => h("div", { class: "s-bar" + (r.right ? " right" : "") }, h("span", {}, r.label), h("b", {}, r.value), h("div", { class: "track" }, h("i", { style: `width:${Math.round((r.frac || 0) * 100)}%;background:${BEDS[n % 8]}` }))))));
     } else main = h("div", { class: "s-main s-two" }, h("div", {}, h("h1", {}, p ? p.name : "Hang tight"), h("div", { class: "s-clock", id: "clk" })), h("ul", { class: "s-list" }, (DO[id] || []).map((x) => h("li", {}, x))));
     app.replaceChildren(band, main, h("div", {}, st.message ? h("div", { class: "s-msg" }, st.message) : null, err ? h("div", { class: "s-err" }, err) : null));
     tick();

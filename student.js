@@ -17,9 +17,11 @@
   function setPath(obj, path, val) { const ks = path.split("."); let o = obj; ks.slice(0, -1).forEach((k) => { o[k] = o[k] || {}; o = o[k]; }); o[ks[ks.length - 1]] = val; }
   function save(path, val) {
     setPath(S.rec, path, val);
-    const patch = {}; setPath(patch, path, val);
-    patch.phase = S.phase;
-    Store.saveStudent(S.cc, S.k, patch).catch(() => {});
+    const top = path.split(".")[0];
+    if (!L.saved.includes(top) && top !== "hook") { keepLocal(); if (S.state) renderNav(); return; }   // stays on this computer
+    setPath(pending, path, val); if (L.saved.includes(top)) pending.phase = top;
+    keepPending();
+    if (!flushTimer) flushTimer = setTimeout(flushQuiet, 20000);
     if (S.state) renderNav();
   }
   function errNode() { return h("div", { class: "err", role: "alert" }); }
@@ -34,7 +36,7 @@
     return a;
   }
 
-  // ---------- drafts: on this computer right away, in the cloud every 15 seconds ----------
+  // ---------- drafts: on this computer right away, in the cloud every 20 seconds ----------
   const draftKey = (id) => `itg-draft:${L.id}:${S.cc}:${S.k}:${id}`;
   const dirty = {};
   let flushTimer = null;
@@ -45,17 +47,34 @@
   function setDraft(id, val) {
     try { localStorage.setItem(draftKey(id), JSON.stringify(val)); } catch (e) {}
     dirty[id] = val; setPath(S.rec, "drafts." + id, val);
-    if (!flushTimer) flushTimer = setTimeout(flushDrafts, 15000);
+    if (!flushTimer) flushTimer = setTimeout(flushQuiet, 20000);
   }
+  // Everything a student does goes out in one save, at most every 20 seconds, so a busy lab
+  // cannot use up the day's database writes. A copy stays on this computer until it is saved.
+  let pending = {};
+  // Sections that are not saved (table, lab) live only in this browser, so a reload keeps the place.
+  const localKey = () => `itg-local:${L.id}:${S.cc}:${S.k}`;
+  function keepLocal() { try { localStorage.setItem(localKey(), JSON.stringify({ table: S.rec.table, lab: S.rec.lab, done: S.rec.done })); } catch (e) {} }
+  const pendKey = () => `itg-pend:${L.id}:${S.cc}:${S.k}`;
+  function keepPending() { try { localStorage.setItem(pendKey(), JSON.stringify(pending)); } catch (e) {} }
+  const isMap = (x) => x && typeof x === "object" && !Array.isArray(x);
+  const deep = (a, b) => { const o = Object.assign({}, a); for (const k in b) o[k] = isMap(b[k]) && isMap(o[k]) ? deep(o[k], b[k]) : b[k]; return o; };
   function flushDrafts() {
     clearTimeout(flushTimer); flushTimer = null;
-    if (!S.k || !Object.keys(dirty).length) return;
-    const drafts = Object.assign({}, dirty);
-    Object.keys(dirty).forEach((k) => delete dirty[k]);
-    Store.saveStudent(S.cc, S.k, { drafts }).catch(() => Object.keys(drafts).forEach((k) => { if (!(k in dirty)) dirty[k] = drafts[k]; }));
+    if (!S.k || (!Object.keys(dirty).length && !Object.keys(pending).length)) return Promise.resolve();
+    const drafts = Object.assign({}, dirty), mine = pending, key = pendKey(), k = S.k;
+    Object.keys(dirty).forEach((d) => delete dirty[d]); pending = {};
+    const patch = Object.assign({}, mine, Object.keys(drafts).length ? { drafts } : {});
+    return Store.saveStudent(S.cc, S.k, patch).then(() => {
+      try { if (S.k !== k || !Object.keys(pending).length) localStorage.removeItem(key); } catch (e) {}
+    }, (e) => {
+      if (S.k === k) { Object.keys(drafts).forEach((d) => { if (!(d in dirty)) dirty[d] = drafts[d]; }); pending = deep(mine, pending); keepPending(); if (!flushTimer) flushTimer = setTimeout(flushQuiet, 20000); }
+      throw e;
+    });
   }
-  document.addEventListener("visibilitychange", () => { if (document.hidden) flushDrafts(); });
-  window.addEventListener("pagehide", flushDrafts);
+  const flushQuiet = () => flushDrafts().catch(() => {});
+  document.addEventListener("visibilitychange", () => { if (document.hidden) flushQuiet(); });
+  window.addEventListener("pagehide", flushQuiet);
 
   // ---------- sign in ----------
   function signIn(message) {
@@ -96,15 +115,22 @@
       console.warn(e);
       return fail(e.code === "permission-denied" ? "That name is in use on another computer. If it is yours, ask your teacher to release it. If not, add more of your last name." : "Cannot reach the server. Check the Wi-Fi and try again.");
     }
-    Object.assign(S, { name: rec.name, cc, k, rec, phase: null, seen: null });
+    Object.assign(S, { name: rec.name, cc, k, rec, phase: null, seen: null, hookErr: "" }); hookPick = undefined;
+    pending = {}; Object.keys(dirty).forEach((d) => delete dirty[d]);
+    try { S.rec = deep(S.rec, JSON.parse(localStorage.getItem(localKey())) || {}); } catch (e) {}
+    try { const p = JSON.parse(localStorage.getItem(pendKey())); if (p) { pending = Object.fromEntries(Object.entries(p).filter(([x]) => L.saved.includes(x) || x === "hook" || x === "phase")); S.rec = deep(S.rec, p); flushQuiet(); } } catch (e) {}
     try { localStorage.setItem("itg-me", JSON.stringify({ name: S.name, cc })); } catch (e) {}
-    document.getElementById("who").replaceChildren(h("span", {}, `${S.name}, ${cc} `), h("button", { class: "link", onclick: () => { flushDrafts(); try { localStorage.removeItem("itg-me"); } catch (e) {} signIn(); } }, "Sign out"));
+    document.getElementById("who").replaceChildren(h("span", {}, `${S.name}, ${cc} `), h("button", { class: "link", onclick: () => { flushQuiet(); try { localStorage.removeItem("itg-me"); } catch (e) {} signIn(); } }, "Sign out"));
     S.offs.push(Store.subscribeState(cc, (st) => {
+      const shown = S.seen && S.state.hookReveal;
       S.state = st || { unlocked: ["pre"] };
+      const reveal = S.seen && !shown && S.state.hookReveal && isOpen("hook"), rehook = !!shown !== !!S.state.hookReveal;
       tickClock(); drawEyes(); drawNote();
       const open = S.state.unlocked || [], fresh = S.seen ? open.filter((x) => !S.seen.includes(x)) : [];
       S.seen = open.slice();
-      if (!S.phase || !isOpen(S.phase)) { S.phase = lastOpen(); hideBanner(); render(); }
+      if (reveal && S.phase !== "hook" && S.state.phase === "hook") goPhase("hook");   // the reveal shows on everyone's screen
+      else if (!S.phase || !isOpen(S.phase)) { S.phase = lastOpen(); hideBanner(); render(); }
+      else if (rehook && S.phase === "hook") render();
       else {
         renderNav();
         const next = L.phases.filter((p) => fresh.includes(p.id) && p.id !== S.phase).pop();
@@ -118,7 +144,7 @@
       if (test && was !== JSON.stringify(sc) && (isSubmitted(S.phase) || slotFor(S.phase) !== slot)) renderMain();
     }));
   }
-  function goPhase(id) { flushDrafts(); S.phase = id; hideBanner(); save("phase", id); render(); }
+  function goPhase(id) { S.phase = id; hideBanner(); render(); }
   function showBanner(p) {
     S.bannerFor = p.id;
     banner.replaceChildren(h("span", {}, "Next section is open: " + p.name), h("button", { class: "btn", onclick: () => goPhase(p.id) }, "Go there"));
@@ -293,16 +319,31 @@
   }
 
   // ---------- HOOK ----------
+  // Pick, then confirm. The answer stays hidden until the teacher reveals it.
+  let hookPick;
   function hook() {
-    const Hk = L.hook, picked = get("hook.choice");
+    const Hk = L.hook, sent = get("hook.choice"), show = !!S.state.hookReveal;
     const wrap = h("div", {}, h("h2", {}, "Question of the day"));
     const fb = h("div", { role: "status" });
-    const btns = Hk.choices.map((c, i) => h("button", { type: "button", class: "choice", onclick: () => { save("hook", { choice: i, done: true }); render(); } }, c));
-    if (picked !== undefined) {
-      btns.forEach((b, i) => { b.disabled = true; if (i === Hk.answer) b.classList.add("right"); else if (i === picked) b.classList.add("wrong"); });
-      fb.append(h("div", { class: "fb " + (picked === Hk.answer ? "ok" : "info") }, Hk.reveal), h("p", { class: "small muted" }, "Write $109 billion on your notes sheet."));
-    }
-    wrap.append(h("div", { class: "card" }, h("h3", {}, Hk.q), h("div", { class: "choices" }, btns), fb));
+    const sel = () => (sent !== undefined ? sent : hookPick);
+    const paint = () => btns.forEach((b, i) => { b.classList.toggle("sel", !show && sel() === i); b.setAttribute("aria-pressed", String(sel() === i)); });
+    const btns = Hk.choices.map((c, i) => h("button", { type: "button", class: "choice", disabled: show || sent !== undefined, onclick: () => { hookPick = i; go.disabled = false; paint(); } }, c));
+    const go = h("button", { class: "btn", disabled: hookPick === undefined, onclick: async () => {
+      if (hookPick === undefined) return;
+      go.disabled = true; go.textContent = "Sending...";
+      const choice = hookPick;
+      save("hook", { choice, done: true });
+      try { await Promise.race([flushDrafts(), new Promise((_, r) => setTimeout(() => r(new Error("slow")), 12000))]); S.hookErr = ""; }
+      catch (e) { S.hookErr = "Your guess is kept on this computer and will send when the connection is back."; }
+      hookPick = undefined;
+      if (S.phase === "hook") render();
+    } }, "Confirm my guess");
+    paint();
+    if (show) {
+      btns.forEach((b, i) => { if (i === Hk.answer) b.classList.add("right"); else if (i === sent) b.classList.add("wrong"); });
+      fb.append(h("div", { class: "fb " + (sent === Hk.answer ? "ok" : "info") }, Hk.reveal), h("p", { class: "small muted" }, "Write $109 billion on your notes sheet."));
+    } else if (sent !== undefined) fb.append(h("div", { class: "fb info" }, S.hookErr || "Your guess is in. Your teacher will reveal the answer."));
+    wrap.append(h("div", { class: "card" }, h("h3", {}, Hk.q), h("div", { class: "choices" }, btns), show || sent !== undefined ? null : h("div", { style: "margin-top:16px" }, go), fb));
     return wrap;
   }
 
@@ -449,7 +490,7 @@
     drawVs();
     function checkLab() {
       drawVs();
-      if (get("lab.jordanFinal") && get("lab.caseyRuns", []).length >= C.runs) save("lab.done", true); }
+      if (get("lab.jordanFinal") && get("lab.caseyRuns", []).length >= C.runs) !get("lab.done") && save("lab.done", true); }
     return wrap;
   }
 
