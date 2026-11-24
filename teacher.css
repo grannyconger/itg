@@ -1,0 +1,45 @@
+body.teacher main { max-width: 1440px; padding: 28px 32px 60px; }
+body.teacher header.top { padding: 6px 32px; flex-wrap: wrap; }
+header.top select, header.top input { width: auto; padding: 5px 8px; min-height: 40px; background: var(--palm-2); color: var(--on-palm); border-color: #4c7d70; }
+header.top input[type=time] { color-scheme: dark; width: 118px; }
+.tabs { display: flex; gap: 4px; }
+.tabs button { background: none; border: 0; border-bottom: 3px solid transparent; padding: 8px 12px; min-height: 46px; color: var(--on-palm-2); }
+.tabs button:hover { color: #fff; } .tabs button.on { color: #fff; font-weight: 700; border-color: var(--sand); }
+.badge { display: inline-block; min-width: 24px; text-align: center; border-radius: 12px; background: var(--sand); color: var(--palm); font-weight: 700; font-size: 15px; padding: 0 7px; margin-left: 4px; }
+#bell { font-size: 16px; display: flex; align-items: center; gap: 10px; } #bell .late { color: var(--sand); font-weight: 700; }
+#band { background: var(--palm); color: var(--on-palm); padding: 4px 32px 12px; } #band:empty { display: none; }
+#band .in { max-width: 1376px; margin: 0 auto; } #band svg.garden { height: 72px; }
+#band .cells { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); }
+#band .cell { text-align: center; font-size: 16px; line-height: 1.25; padding-top: 6px; }
+#band .cell.on b { text-decoration: underline; text-decoration-color: var(--sand); text-decoration-thickness: 3px; text-underline-offset: 5px; }
+#band .cell b { font-weight: 500; display: block; } #band .cell.on b { font-weight: 700; }
+#band .cell button { border: 0; background: none; color: var(--on-palm-2); font-size: 15px; min-height: 34px; padding: 2px 8px; border-radius: 6px; }
+#band .cell button:hover { background: var(--palm-2); color: #fff; } #band .cell button.open { color: #b9dcb9; }
+#bar:empty { display: none; } #bar { background: var(--bad-bg); color: #742a1b; padding: 8px 32px; display: flex; gap: 16px; align-items: center; }
+.run { display: grid; grid-template-columns: minmax(340px, 1.15fr) minmax(0, 1.25fr) minmax(300px, .95fr); gap: 44px; align-items: start; }
+.run h2 { font-size: 24px; margin: 0 0 8px; } .run h2:not(:first-child) { margin-top: 26px; }
+.now h1 { font-size: 40px; margin: 0; }
+.bigclock { font-size: 120px; font-weight: 700; line-height: 1.05; } .bigclock.over { color: var(--bad); } .bigclock.idle { font-size: 48px; color: var(--muted); padding: 24px 0; }
+.meter { height: 10px; background: var(--tint); border-radius: 5px; overflow: hidden; margin: 6px 0 20px; } .meter i { display: block; height: 100%; background: var(--accent); }
+.now .btn.main { width: 100%; min-height: 58px; font-size: 20px; margin-bottom: 10px; }
+button.btn.on { background: var(--sand); border-color: var(--sand); color: var(--palm); }
+.script p { margin: 0; font-size: 20px; } .script ul, .script ol { margin: 0; padding-left: 22px; } .script li { margin: 4px 0; }
+.script .trim { background: var(--sand-bg); color: var(--sand-ink); padding: 10px 14px; border-radius: var(--r-sm); font-size: 18px; margin-top: 24px; }
+.list { border-top: 1px solid var(--line); } .list button { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 12px; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: none; padding: 9px 6px; min-height: 46px; align-items: center; }
+.list button:hover { background: var(--accent-bg); } .list button span { color: var(--muted); text-align: right; } .list button.on { background: var(--accent-bg); font-weight: 700; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; } .seg .btn { padding: 7px 13px; }
+.msg { display: flex; gap: 8px; margin-top: 8px; }
+.bars { display: grid; gap: 10px; } .bars .r { display: grid; grid-template-columns: 1fr auto; gap: 2px 16px; } .bars .meter { grid-column: 1 / -1; margin: 0; } .bars .low .meter i { background: var(--gam); } .bars .low > b { color: var(--gam); }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: start; } .two section { margin-bottom: 36px; }
+table.t td.num, table.t th.num { text-align: right; } table.t th button { border: 0; background: none; font-weight: 700; padding: 6px 0; min-height: 40px; } table.t th button:hover { color: var(--accent); }
+table.t tbody tr:hover td { background: var(--tint); } .students { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 16px; margin-top: 14px; }
+.grade { display: grid; grid-template-columns: 280px minmax(0, 1fr) 360px; gap: 36px; align-items: start; }
+.grade .work p { margin: 2px 0 0; font-size: 20px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.grade .side { position: sticky; top: 80px; display: grid; gap: 12px; }
+.scores { display: grid; gap: 6px; } .scores button { display: grid; grid-template-columns: 34px 1fr; gap: 6px; text-align: left; border: 1px solid var(--line-2); background: #fff; border-radius: var(--r-sm); padding: 9px 12px; line-height: 1.3; font-size: 16px; } .scores button b { font-size: 24px; line-height: 1; }
+.scores button:hover { border-color: var(--accent); } .scores button.on { background: var(--accent-bg); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); } .scores em { font-style: normal; font-weight: 700; display: block; }
+kbd { font: 500 15px/1 inherit; font-family: inherit; border: 1px solid var(--line-2); border-radius: 4px; padding: 1px 6px; background: #fff; color: var(--ink); }
+.panel { position: fixed; inset: 0 0 0 auto; width: min(560px, 100%); background: var(--card); border-left: 1px solid var(--line-2); box-shadow: -12px 0 36px #153d3524; padding: 24px; overflow: auto; z-index: 20; overscroll-behavior: contain; }
+.gate { max-width: 440px; margin: 60px auto; }
+@media (max-width: 1180px) { .run { grid-template-columns: 1fr 1fr; gap: 32px; } .run > :last-child { grid-column: 1 / -1; } .grade { grid-template-columns: 220px minmax(0, 1fr); } .grade .side { grid-column: 2; position: static; } }
+@media (max-width: 760px) { .run, .grade, .two { grid-template-columns: minmax(0, 1fr); } .grade .side { grid-column: auto; } body.teacher main, #band, body.teacher header.top { padding-inline: 16px; } #band { overflow-x: auto; } #band .in { min-width: 860px; } .tabs { overflow-x: auto; max-width: 100%; } .bigclock { font-size: 88px; } }

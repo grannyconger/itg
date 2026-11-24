@@ -10,18 +10,7 @@
   });
 
   // ---------- helpers ----------
-  function h(tag, attrs, ...kids) {
-    const el = document.createElement(tag);
-    for (const k in attrs || {}) {
-      const v = attrs[k];
-      if (k === "class") el.className = v;
-      else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
-      else if (k === "html") el.innerHTML = v;
-      else if (v !== false && v != null) el.setAttribute(k, v === true ? "" : v);
-    }
-    kids.flat().forEach((c) => { if (c == null || c === false) return; el.append(c.nodeType ? c : document.createTextNode(c)); });
-    return el;
-  }
+  const { h, icon, garden, plan, remaining, clock } = window.UI;
   const money = (n) => (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
   const norm = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
   const get = (path, dflt) => path.split(".").reduce((o, k) => (o && o[k] !== undefined ? o[k] : undefined), S.rec) ?? dflt;
@@ -33,7 +22,7 @@
     Store.saveStudent(S.cc, S.k, patch).catch(() => {});
     if (S.state) renderNav();
   }
-  function errNode() { return h("div", { class: "err" }); }
+  function errNode() { return h("div", { class: "err", role: "alert" }); }
 
   // ---------- shuffle: same order every time for one student, different between students ----------
   function shuffled(n, seed) {
@@ -71,7 +60,8 @@
   // ---------- sign in ----------
   function signIn(message) {
     nav.classList.add("hidden"); banner.classList.add("hidden");
-    S.offs.forEach((f) => f()); S.offs = []; S.k = null; S.phase = null; S.seen = null;
+    S.offs.forEach((f) => f()); S.offs = []; S.k = null; S.phase = null; S.seen = null; S.state = { unlocked: ["pre"] };
+    document.getElementById("note").classList.add("hidden");
     document.getElementById("who").replaceChildren();
     const q = new URLSearchParams(location.search), codes = q.get("cc") === "TEST" ? ["TEST"] : L.classCodes;
     const name = h("input", { type: "text", id: "nm", placeholder: "First name and last initial", maxlength: 30, autocomplete: "off" });
@@ -84,11 +74,13 @@
       await start(name.value.trim(), sel.value, (m) => { err.textContent = m; btn.disabled = false; btn.textContent = "Start"; });
     } }, "Start");
     [name, sel].forEach((x) => { x.addEventListener("input", () => (err.textContent = "")); x.addEventListener("keydown", (e) => { if (e.key === "Enter") btn.click(); }); });
-    app.replaceChildren(h("div", { class: "card", style: "max-width:460px;margin:40px auto" },
+    const want = codes.find((c) => c === q.get("cc")); if (want) sel.value = want;
+    app.replaceChildren(h("div", { class: "entry" }, h("div", { class: "art" }, plan()), h("div", { class: "form" },
       h("h2", {}, "Sign in"),
       h("p", { class: "muted" }, "Use the same name every time so your work comes back."),
-      h("label", { for: "nm" }, "Name"), name, h("div", { style: "height:10px" }),
-      h("label", { for: "cls" }, "Class"), sel, err, h("div", { style: "height:14px" }), btn));
+      h("label", { for: "nm" }, "Name"), name,
+      h("label", { for: "cls" }, "Class"), sel, err, btn)));
+    tickClock(); drawEyes();
   }
 
   async function start(name, cc, fail) {
@@ -109,6 +101,7 @@
     document.getElementById("who").replaceChildren(h("span", {}, `${S.name}, ${cc} `), h("button", { class: "link", onclick: () => { flushDrafts(); try { localStorage.removeItem("itg-me"); } catch (e) {} signIn(); } }, "Sign out"));
     S.offs.push(Store.subscribeState(cc, (st) => {
       S.state = st || { unlocked: ["pre"] };
+      tickClock(); drawEyes(); drawNote();
       const open = S.state.unlocked || [], fresh = S.seen ? open.filter((x) => !S.seen.includes(x)) : [];
       S.seen = open.slice();
       if (!S.phase || !isOpen(S.phase)) { S.phase = lastOpen(); hideBanner(); render(); }
@@ -139,20 +132,46 @@
     renderNav();
     renderMain();
   }
+  // ---------- clock, eyes up, teacher note ----------
+  function tickClock() {
+    const el = document.getElementById("clock"), r = S.k && S.state ? remaining(S.state) : null;
+    // the clock belongs to the section the class is on
+    const show = r != null && window.UI.current(L, S.state) === S.phase;
+    el.textContent = show ? (r > 0 ? clock(r) + " left" : "Time is up") : "";
+    el.classList.toggle("over", show && r <= 0);
+  }
+  setInterval(tickClock, 1000);
+  function drawEyes() {
+    const on = !!(S.k && S.state && S.state.eyes), el = document.getElementById("eyes");
+    if (on && document.activeElement) document.activeElement.blur();
+    el.classList.toggle("hidden", !on);
+    [app, nav, banner, document.querySelector("header.top")].forEach((x) => (x.inert = on));
+  }
+  function drawNote() {
+    const el = document.getElementById("note"), m = (S.state && S.state.message) || "";
+    el.textContent = m; el.classList.toggle("hidden", !m);
+  }
   function renderNav() {
     nav.classList.remove("hidden");
-    nav.replaceChildren(...L.phases.map((p, i) => h("button", {
-      class: (S.phase === p.id ? "on " : "") + (get(p.id + ".done") ? "done" : ""),
-      disabled: !isOpen(p.id),
-      onclick: () => goPhase(p.id)
-    }, `${i + 1}. ${p.name}`)));
+    const at = L.phases.findIndex((p) => p.id === S.phase);
+    let on;
+    const cells = L.phases.map((p, i) => {
+      const fin = !!get(p.id + ".done"), b = h("button", { class: S.phase === p.id ? "on" : "", "aria-current": S.phase === p.id ? "step" : false, disabled: !isOpen(p.id), onclick: () => goPhase(p.id) },
+        p.name, fin ? [" ", icon("check"), h("span", { class: "sr" }, "finished")] : null);
+      if (S.phase === p.id) on = b;
+      return b;
+    });
+    const keep = nav.scrollLeft;
+    nav.replaceChildren(h("div", { class: "path" }, garden(L.phases.length, at, .5, { H: 24, done: (i) => !!get(L.phases[i].id + ".done") }), h("div", { class: "cells" }, cells)));
+    nav.scrollLeft = keep;
+    if (on && S.navAt !== S.phase) { S.navAt = S.phase; nav.scrollLeft = on.offsetLeft - nav.clientWidth / 2 + on.offsetWidth / 2; }
   }
   function renderMain() {
     app.dataset.phase = S.phase || "";
     if (!S.phase) { app.replaceChildren(h("div", { class: "card locked" }, h("h2", {}, "Hang tight"), h("p", { class: "muted" }, "Your teacher will open the first section in a moment."))); return; }
     const fn = { pre: () => test("pre"), hook, table, lab, cer, sort, post: () => test("post"), done }[S.phase];
     app.replaceChildren(fn());
-    window.scrollTo(0, 0);
+    window.scrollTo(0, 0); tickClock();
   }
 
   // ---------- reusable CER writer ----------
@@ -210,7 +229,9 @@
 
     const draft = Object.assign({ mc: {}, cer: {} }, getDraft(slot));
     const answers = Object.assign({}, draft.mc);
-    const keep = () => setDraft(slot, { mc: Object.assign({}, answers), cer: cw.val() });
+    const left = h("span", { class: "muted" });
+    const count = () => { const v = cw.val(), d = T.mc.filter((q) => answers[q.id] !== undefined).length + ["C", "E", "R"].filter((k) => v[k]).length, n = T.mc.length + 3; left.textContent = d === n ? "Everything is filled in" : `${d} of ${n} parts filled in`; };
+    const keep = () => { setDraft(slot, { mc: Object.assign({}, answers), cer: cw.val() }); count(); };
     T.mc.forEach((q, i) => {
       const order = shuffled(q.choices.length, S.k + S.cc + slot + q.id);
       const btns = order.map((ci, pos) => h("button", { type: "button", class: "choice" + (answers[q.id] === ci ? " sel" : ""), "aria-pressed": String(answers[q.id] === ci), onclick: () => {
@@ -244,7 +265,8 @@
       delete dirty[slot];
       if (S.phase === kind) render();
     } }, "Submit");
-    wrap.append(btn, err);
+    count();
+    wrap.append(h("div", { class: "submitbar" }, err, btn, left));
     return wrap;
   }
 
@@ -274,7 +296,7 @@
   function hook() {
     const Hk = L.hook, picked = get("hook.choice");
     const wrap = h("div", {}, h("h2", {}, "Question of the day"));
-    const fb = h("div", {});
+    const fb = h("div", { role: "status" });
     const btns = Hk.choices.map((c, i) => h("button", { type: "button", class: "choice", onclick: () => { save("hook", { choice: i, done: true }); render(); } }, c));
     if (picked !== undefined) {
       btns.forEach((b, i) => { b.disabled = true; if (i === Hk.answer) b.classList.add("right"); else if (i === picked) b.classList.add("wrong"); });
@@ -288,12 +310,12 @@
   function table() {
     const T = L.table;
     const wrap = h("div", {}, h("h2", {}, "Three ways to use money"), h("p", { class: "muted" }, "Watch the video, then use this table to fill in your notes sheet."));
-    wrap.append(h("div", { class: "card" }, h("table", { class: "t" },
+    wrap.append(h("div", { class: "card scroll" }, h("table", { class: "t" },
       h("tr", {}, h("th", {}, ""), h("th", {}, h("span", { class: "tag t-investing" }, "Investing")), h("th", {}, h("span", { class: "tag t-trading" }, "Trading")), h("th", {}, h("span", { class: "tag t-gambling" }, "Gambling"))),
       T.rows.map((r) => h("tr", {}, h("th", {}, r.label), h("td", {}, r.investing), h("td", {}, r.trading), h("td", {}, r.gambling))))));
     const card = h("div", { class: "card" }, h("h3", {}, "Quick check"));
     T.blanks.forEach((b) => {
-      const inp = h("input", { type: "text", style: "max-width:220px" }); inp.value = get("table." + b.id, "");
+      const inp = h("input", { type: "text", style: "max-width:220px", "aria-label": b.text.replace("____", "blank") }); inp.value = get("table." + b.id, "");
       const fb = h("span", { class: "small" });
       const check = () => {
         const ok = b.answers.includes(norm(inp.value));
@@ -315,7 +337,7 @@
       h("p", {}, "Jordan and Casey are both 28. Each has $300 a month. Jordan invests it in an S&P 500 index fund. Casey bets $10 a day on sports. What happens over 10 years?"));
 
     // Jordan
-    const fin = h("input", { type: "number", placeholder: "Final portfolio value", style: "max-width:260px" });
+    const fin = h("input", { type: "number", placeholder: "Final portfolio value", "aria-label": "Final portfolio value", style: "max-width:260px" });
     fin.value = get("lab.jordanFinal", "");
     const jOut = h("div", {});
     const jErr = errNode();
@@ -330,7 +352,7 @@
     wrap.append(h("div", { class: "card" },
       h("h3", {}, h("span", { class: "tag t-investing" }, "Jordan"), " invests $300 a month"),
       h("ol", {}, J.steps.map((s) => h("li", {}, s))),
-      h("button", { class: "btn ghost", onclick: () => window.open(J.url, "_blank") }, "Open the S&P 500 calculator"),
+      h("button", { class: "btn ghost", onclick: () => window.open(J.url, "_blank", "noopener") }, "Open the S&P 500 calculator"),
       h("div", { style: "height:12px" }),
       h("div", { class: "row" }, fin, h("button", { class: "btn", onclick: () => {
         const v = Number(fin.value);
@@ -389,7 +411,7 @@
 
     // Powerball
     const pick = get("lab.pbPick", null);
-    const inputs = [...Array(6)].map((_, i) => h("input", { type: "number", min: 1, max: i < 5 ? 69 : 26, class: i === 5 ? "pb" : "", placeholder: i < 5 ? "1-69" : "PB" }));
+    const inputs = [...Array(6)].map((_, i) => h("input", { type: "number", min: 1, max: i < 5 ? 69 : 26, class: i === 5 ? "pb" : "", placeholder: i < 5 ? "1-69" : "PB", "aria-label": i < 5 ? "White ball " + (i + 1) : "Powerball" }));
     if (pick) { pick.white.forEach((n, i) => (inputs[i].value = n)); inputs[5].value = pick.pb; }
     const pbErr = errNode(), pbOut = h("div", {});
     const readPick = () => {
@@ -431,22 +453,39 @@
     return wrap;
   }
 
+  // ---------- one at a time ----------
+  // items: [{ el, done() }]. Remembers the place on this page load. Every item stays in the page, so nothing typed is lost.
+  const places = {};
+  function stepper(id, items, label) {
+    const firstOpen = items.findIndex((x) => !x.done());
+    let at = places[id] !== undefined ? places[id] : Math.max(0, firstOpen);
+    const dots = h("div", { class: "steps", role: "group", "aria-label": label }), back = h("button", { class: "btn ghost", onclick: () => go(at - 1) }, "Back"), next = h("button", { class: "btn ghost", onclick: () => go(at + 1) }, "Next one", icon("next"));
+    const box = h("div", {}, dots, items.map((x) => x.el), h("div", { class: "stepnav" }, back, next));
+    function go(n) { at = places[id] = n; draw(); const t = box.getBoundingClientRect().top; if (t < 0) box.scrollIntoView(); }
+    function draw() {
+      items.forEach((x, i) => x.el.classList.toggle("hidden", i !== at));
+      dots.replaceChildren(...items.map((x, i) => h("button", { type: "button", class: (i === at ? "on " : "") + (x.done() ? "done" : ""), "aria-current": i === at ? "step" : false, "aria-label": `${label} ${i + 1}${x.done() ? ", finished" : ""}`, onclick: () => go(i) }, String(i + 1))));
+      back.disabled = at === 0; next.disabled = at === items.length - 1;
+    }
+    draw();
+    box.refresh = draw;
+    box.addEventListener("click", () => setTimeout(() => { if (box.contains(document.activeElement) && dots.contains(document.activeElement)) return; draw(); }, 0));
+    return box;
+  }
+
   // ---------- CER PRACTICE ----------
   function cer() {
     const P = L.cer;
     const wrap = h("div", {}, h("h2", {}, "CER: you already do this every day"),
       h("div", { class: "fb info" }, P.detective));
     wrap.append(h("div", { class: "card" }, ["C", "E", "R"].map((k) => h("div", { class: "cer-box " + k }, P.tests[k]))));
-    const ex = h("div", { class: "card" }, h("h3", {}, "Everyday examples"));
-    P.dailyLife.forEach((d) => ex.append(h("div", { style: "margin-bottom:14px" }, h("b", {}, d.topic),
-      h("div", { class: "cer-box C" }, h("span", { class: "tag t-C" }, "C"), " ", d.C),
-      h("div", { class: "cer-box E" }, h("span", { class: "tag t-E" }, "E"), " ", d.E),
-      h("div", { class: "cer-box R" }, h("span", { class: "tag t-R" }, "R"), " ", d.R))));
-    wrap.append(ex);
-    wrap.append(h("div", { class: "card" }, h("h3", {}, "Sentence openers"), h("div", { class: "grid3" },
-      ["C", "E", "R"].map((k) => h("div", {}, h("span", { class: "tag t-" + k }, { C: "Claim", E: "Evidence", R: "Reasoning" }[k]), h("ul", { class: "small", style: "padding-left:18px" }, P.openers[k].map((o) => h("li", {}, o))))))));
+    const one = (d) => h("div", { style: "margin-bottom:16px" }, h("b", {}, d.topic), ["C", "E", "R"].map((k) => h("div", { class: "cer-box " + k }, h("span", { class: "tag t-" + k }, k), " ", d[k])));
+    wrap.append(h("div", { class: "card" }, h("h3", {}, "Everyday example"), one(P.dailyLife[0]),
+      h("details", {}, h("summary", {}, `${P.dailyLife.length - 1} more examples`), P.dailyLife.slice(1).map(one)),
+      h("details", {}, h("summary", {}, "Sentence openers"), h("div", { class: "grid3" },
+        ["C", "E", "R"].map((k) => h("div", {}, h("span", { class: "tag t-" + k }, { C: "Claim", E: "Evidence", R: "Reasoning" }[k]), h("ul", { class: "small", style: "padding-left:18px" }, P.openers[k].map((o) => h("li", {}, o)))))))));
     wrap.append(h("h2", {}, "Practice: 8 quick ones"));
-    P.items.forEach((it, i) => wrap.append(practiceItem(it, i)));
+    wrap.append(stepper("cer", P.items.map((it, i) => ({ el: practiceItem(it, i), done: () => !!(get("cer.items." + it.id + ".correct") || (it.type === "short" && get("cer.items." + it.id))) })), "Item"));
     return wrap;
   }
 
@@ -459,7 +498,7 @@
 
   function practiceItem(it, i) {
     const card = h("div", { class: "card" }, h("h3", {}, `${i + 1}. ${it.title}`), h("p", { style: "white-space:pre-line" }, it.prompt));
-    const fb = h("div", {});
+    const fb = h("div", { role: "status" });
     const say = (ok, msg) => fb.replaceChildren(h("div", { class: "fb " + (ok ? "ok" : "no") }, msg));
     if (it.type === "match" || it.type === "label") {
       const picks = {};
@@ -488,7 +527,7 @@
       } }, String.fromCharCode(65 + ci) + ". " + c));
       card.append(h("div", { class: "choices" }, btns));
     } else if (it.type === "fill") {
-      const inp = h("input", { type: "text", style: "max-width:260px" });
+      const inp = h("input", { type: "text", style: "max-width:260px", "aria-label": "Your answer" });
       card.append(h("div", { class: "row" }, inp, h("button", { class: "btn", onclick: () => {
         if (!inp.value.trim()) { say(false, "Type an answer first"); return; }
         const ok = it.answers.includes(norm(inp.value)); record(it.id, ok);
@@ -519,9 +558,9 @@
     const wrap = h("div", {}, h("h2", {}, "Scenario sorter"),
       h("p", {}, "Round 1: just pick the label. Round 2: pick the label (that's your Claim), then write your Evidence and Reasoning. The AI coach gives you feedback."));
     wrap.append(h("h3", {}, "Round 1: speed sort"));
-    SO.round1.forEach((s, i) => {
+    wrap.append(stepper("r1", SO.round1.map((s, i) => {
       const prev = get("sort." + s.id + ".label");
-      const fb = h("div", {});
+      const fb = h("div", { role: "status" });
       const bs = LABELS.map((lb) => h("button", { type: "button", class: lb + (prev === lb ? " sel" : ""), onclick: () => {
         bs.forEach((b) => b.classList.toggle("sel", b.textContent === lb));
         const ok = lb === s.answer;
@@ -530,15 +569,16 @@
         fb.replaceChildren(h("div", { class: "fb " + (ok ? "ok" : "no") }, ok ? "Yes. " + s.why : "Look again. How long is the money in? Who sets the odds? What would have to happen for this person to come out ahead?"));
         checkSort();
       } }, lb));
-      wrap.append(h("div", { class: "card" }, h("p", { style: "margin-top:0" }, `${i + 1}. ${s.text}`), h("span", { class: "lbl-btns" }, bs), fb));
-    });
+      return { el: h("div", { class: "card" }, h("p", { class: "big", style: "margin-top:0;font-weight:500" }, `${i + 1}. ${s.text}`), h("span", { class: "lbl-btns" }, bs), fb), done: () => !!get("sort." + s.id + ".label") };
+    }), "Scenario"));
     wrap.append(h("h3", {}, "Round 2: Claim, Evidence, Reasoning"));
-    SO.round2.forEach((s, i) => wrap.append(sorterCER(s, SO.round1.length + i + 1)));
+    const r2 = stepper("r2", SO.round2.map((s, i) => ({ el: sorterCER(s, SO.round1.length + i + 1, () => r2.refresh()), done: () => !!get("sort." + s.id + ".label") })), "Scenario");
+    wrap.append(r2);
     function checkSort() { if ([...SO.round1, ...SO.round2].every((s) => get("sort." + s.id + ".label"))) save("sort.done", true); }
     return wrap;
   }
 
-  function sorterCER(s, n) {
+  function sorterCER(s, n, changed) {
     const prev = get("sort." + s.id, {});
     const dr = Object.assign({ label: prev.label || null, evidence: prev.evidence || "", reasoning: prev.reasoning || "" }, getDraft(s.id));
     let label = dr.label;
@@ -550,7 +590,7 @@
       return { ta, el: h("div", { class: "cer-box " + (k === "evidence" ? "E" : "R") }, h("span", { class: "tag t-" + (k === "evidence" ? "E" : "R") }, k === "evidence" ? "Evidence" : "Reasoning"), ops, ta) };
     };
     const ev = mk("evidence", "What detail in the scenario can you point to?"), rs = mk("reasoning", "Why does that detail make it this label?");
-    const fb = h("div", {});
+    const fb = h("div", { role: "status" });
     if (prev.ai) fb.append(aiFb(prev.ai));
     const err = errNode();
     const btn = h("button", { class: "btn", style: "margin-top:8px", onclick: async () => {
@@ -568,7 +608,7 @@
       if (!prev.first && !ai.unavailable) rec.first = { label, score: ai.score, mixedUp: !!ai.mixedUp };
       if (prev.firstTry === undefined) rec.firstTry = rec.correct;
       save("sort." + s.id, Object.assign({}, prev, rec)); Object.assign(prev, rec);
-      fb.replaceChildren(aiFb(ai));
+      fb.replaceChildren(aiFb(ai)); changed();
       btn.disabled = false; btn.textContent = "Revise and get feedback again";
       if ([...L.sorter.round1, ...L.sorter.round2].every((x) => get("sort." + x.id + ".label"))) save("sort.done", true);
     } }, prev.ai ? "Revise and get feedback again" : "Get feedback");

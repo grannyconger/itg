@@ -3,7 +3,8 @@
   const cfg = window.ITG_CONFIG, L = window.LESSON;
   const teacher = !!window.ITG_TEACHER;
   // The teacher page uses its own Firebase app, so testing both pages in one browser never mixes sign-ins.
-  const app = teacher ? firebase.initializeApp(cfg.firebase, "itg-teacher") : firebase.initializeApp(cfg.firebase);
+  const appName = teacher ? "itg-teacher" : window.ITG_SCREEN ? "itg-screen" : null;
+  const app = appName ? firebase.initializeApp(cfg.firebase, appName) : firebase.initializeApp(cfg.firebase);
   const auth = app.auth(), db = app.firestore();
   try { db.settings({ ignoreUndefinedProperties: true, experimentalAutoDetectLongPolling: true, merge: true }); } catch (e) {}
   if (cfg.emu) { auth.useEmulator("http://localhost:9099"); db.useEmulator("localhost", 8080); }

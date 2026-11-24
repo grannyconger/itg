@@ -4,21 +4,25 @@
 <meta charset="utf-8">
 <meta name="robots" content="noindex">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#153d35">
 <title>Invest, Trade, or Bet?</title>
-<link rel="stylesheet" href="styles.css?v=1">
+<link rel="stylesheet" href="styles.css?v=2">
 </head>
 <body>
-<header class="top"><h1>Invest, Trade, or Bet?</h1><span class="save" id="save" role="status"></span><span class="who" id="who"></span></header>
-<nav class="phases hidden" id="nav"></nav>
-<div id="banner" class="banner hidden"></div>
+<header class="top"><h1>Invest, Trade, or Bet?</h1><span class="clock" id="clock" role="timer"></span><span class="save" id="save" role="status"></span><span class="who" id="who"></span></header>
+<nav class="phases hidden" id="nav" aria-label="Lesson sections"></nav>
+<div id="banner" class="banner hidden" role="status"></div>
+<div id="note" class="note hidden" role="status"></div>
 <main id="app"></main>
+<div id="eyes" class="eyes hidden" role="status"><h2>Eyes on your teacher</h2><p>Your work is saved. This screen will open again soon.</p></div>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="config.js?v=1"></script>
-<script src="content.js?v=1"></script>
-<script src="store.js?v=1"></script>
-<script src="sims.js?v=1"></script>
-<script src="student.js?v=1"></script>
+<script src="config.js?v=2"></script>
+<script src="content.js?v=2"></script>
+<script src="ui.js?v=2"></script>
+<script src="store.js?v=2"></script>
+<script src="sims.js?v=2"></script>
+<script src="student.js?v=2"></script>
 </body>
 </html>
